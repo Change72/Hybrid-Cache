@@ -9,67 +9,97 @@ const int MEMORY_CACHE_SIZE = 4 * 1024 * 1024;  // 10 MB
 const int DISK_CACHE_SIZE = 10 * 1024 * 1024;   // 10 MB
 const int BLOCK_SIZE = 2 * 1024 * 1024;           // 2 MB
 
-template <typename KeyType, typename ValueType>
-class LRUCache {
+template <typename KeyType>
+class LRUList {
 private:
     int capacity;
-    std::list<KeyType> lruList;
-    std::unordered_map<KeyType, std::pair<ValueType, typename std::list<KeyType>::iterator>> cache;
+    std::list<KeyType> lruList; // record data index
 
 public:
-    LRUCache(int capacity) : capacity(capacity) {}
+    LRUList(int capacity) : capacity(capacity) {}
 
-    void set(const KeyType key, const ValueType value) {
-        auto pos = cache.find(key);
-        if (pos == cache.end()) {
-            lruList.push_front(key);
-            cache[key] = { value, lruList.begin() };
-            if (cache.size() > capacity) {
-                cache.erase(lruList.back());
-                lruList.pop_back();
-            }
+    void visit(const KeyType key) {
+        auto pos = std::find(lruList.begin(), lruList.end(), key);
+        if (pos != lruList.end()) {
+            lruList.erase(pos);
         }
-        else {
-            lruList.erase(pos->second.second);
-            lruList.push_front(key);
-            cache[key] = { value, lruList.begin() };
-        }
-    }
-
-    bool get(const KeyType key, ValueType &value) {
-        auto pos = cache.find(key);
-        if (pos == cache.end())
-            return false;
-        lruList.erase(pos->second.second);
         lruList.push_front(key);
-        cache[key] = { pos->second.first, lruList.begin() };
-        value = pos->second.first;
-        return true;
+        if (lruList.size() > capacity) {
+            lruList.pop_back();
+        }
     }
 
     int getCapacity() const {
         return capacity;
     }
 
-    void evict() {
+    bool full() const {
+        return lruList.size() == capacity;
+    }
+
+    KeyType evict() {
         if (!lruList.empty()) {
-            KeyType last = lruList.back();
+            auto key = lruList.back();
             lruList.pop_back();
-            cache.erase(last);
+            return key;
         }
     }
 };
 
 template <typename KeyType, typename ValueType>
-class HybridCache {
+class Block {
 private:
-    std::unordered_map<int, LRUCache<KeyType, ValueType>> memoryBlocks;
-    LRUCache<KeyType, ValueType> onDiskCache;
-    std::fstream diskFile;
-    int currentMemoryBlock;
+    int id;
+    int current_size;
+    std::unordered_map<KeyType, ValueType> data;
 
 public:
-    HybridCache() : onDiskCache(DISK_CACHE_SIZE / BLOCK_SIZE),
+    Block(int id) : id(id), current_size(0){}
+
+    bool get(const KeyType key, ValueType& value) {
+        auto pos = data.find(key);
+        if (pos != data.end()) {
+            value = pos->second;
+            return true;
+        }
+        return false;
+    }
+
+    bool put(const KeyType key, const ValueType& value) {
+        if (current_size < BLOCK_SIZE) {
+            data[key] = value;
+            current_size += sizeof(key) + sizeof(value);
+            return true;
+        }
+        return false;
+    }
+
+    int getCapacity() const {
+        return current_size;
+    }
+
+};
+
+
+
+template <typename KeyType, typename ValueType>
+class HybridCache {
+private:
+    std::list<Block<KeyType, ValueType>> memoryBlocks; // include only memory blocks
+    LRUList<int> lruMemoryList; // record data index
+    LRUList<int> lruDiskList; // record data index
+    std::fstream diskFile;
+    int currentBlockIndex;
+    // data index on disk mapping
+    std::unordered_map<int, int> dataIndexMap;
+    // block floom filter
+    // overall big hash table
+    // key can be selective to different blocks
+    // from disk, block compaction
+public:
+    HybridCache() : lruMemoryList(MEMORY_CACHE_SIZE / BLOCK_SIZE),
+                    lruDiskList(DISK_CACHE_SIZE / BLOCK_SIZE),
+                    currentBlockIndex(0),
                     diskFile("hybrid_cache.dat", std::ios::in | std::ios::out | std::ios::binary) {
         if (!diskFile) {
             diskFile.open("hybrid_cache.dat", std::ios::out | std::ios::binary);
@@ -78,44 +108,86 @@ public:
             diskFile.close();
             diskFile.open("hybrid_cache.dat", std::ios::in | std::ios::out | std::ios::binary);
         }
+        for (int i = 0; i < DISK_CACHE_SIZE / BLOCK_SIZE; ++i) {
+            dataIndexMap[i] = -1;
+        }
     }
 
-    ValueType get(KeyType key) {
-        if (memoryBlocks.empty()) {
-            return onDiskCache.get(key);
+    void insertEmptyBlock() {
+        if (memoryBlocks.size() >= MEMORY_CACHE_SIZE / BLOCK_SIZE) {
+            diskToMemory();
+        }
+        auto block = Block<KeyType, ValueType>(currentBlockIndex);
+        memoryBlocks.emplace_back(currentBlockIndex);
+        ++currentBlockIndex;
+    }
+
+    void memoryToDisk() {
+
+    }
+
+    void diskToMemory() {
+        // write data
+        //
+        for (int i = 0; i < lruList.getCapacity(); ++i) {
+            Blocks.emplace_back(i);
+            diskFile.seekg(static_cast<std::streamoff>(i) * BLOCK_SIZE);
+            for (int j = 0; j < BLOCK_SIZE; j += sizeof(KeyType) + sizeof(ValueType)) {
+                KeyType key;
+                ValueType value;
+                diskFile.read(reinterpret_cast<char*>(&key), sizeof(KeyType));
+                diskFile.read(reinterpret_cast<char*>(&value), sizeof(ValueType));
+                Blocks.back().put(key, value);
+            }
+        }
+    }
+
+
+    // if set/get first visit to provent target been evicted
+
+#TODO how to get key and correspondign data index
+    bool get(const KeyType key, ValueType& value) {
+        int dataIndex = key / BLOCK_SIZE;
+        if (dataIndex == currentBlockIndex) {
+            if (Blocks.back().get(key, value)) {
+//                lruList.visit(dataIndex);
+                return true;
+            }
         } else {
-            for (auto& block : memoryBlocks) {
-                ValueType value = block.second.get(key);
-                if (value != ValueType()) {
-                    return value;
+            for (auto& data : Blocks) {
+                if (data.get(key, value)) {
+//                    lruList.visit(dataIndex);
+                    return true;
                 }
             }
-            return onDiskCache.get(key);
+        }
+        return false;
+    }
+
+    bool put(const KeyType key, const ValueType& value) {
+
+    }
+
+
+    void flush_data() {
+        // evict by lru
+        for (auto& data : Blocks) {
+            writeToDisk(data);
         }
     }
 
-    void put(KeyType key, const ValueType& value) {
-        if (memoryBlocks.empty() || memoryBlocks[currentMemoryBlock].getCapacity() == 0) {
-            // Create a new memory block
-            memoryBlocks.emplace(currentMemoryBlock, LRUCache<KeyType, ValueType>(MEMORY_CACHE_SIZE / BLOCK_SIZE));
-        }
-
-        // Insert into the current memory block
-        memoryBlocks[currentMemoryBlock].refer(key, value);
-
-        // Write to disk if the current memory block is full
-        if (memoryBlocks[currentMemoryBlock].getCapacity() == 0) {
-            writeToDisk(currentMemoryBlock);
-            onDiskCache.evict(); // Evict from on-disk cache after writing to disk
-            ++currentMemoryBlock;
+    void evict(){
+        // evict by lru
+        for (auto& data : Blocks) {
+            writeToDisk(data);
         }
     }
 
-    void writeToDisk(int blockIndex) {
-        for (const auto& entry: memoryBlocks[blockIndex]) {
-            diskFile.seekp(static_cast<std::streamoff>(entry.first) * BLOCK_SIZE);
-            diskFile.write(reinterpret_cast<const char*>(&entry.second.first), sizeof(ValueType));
-        }
+
+    void writeToDisk(int dataIndex, int offset) {
+        diskFile.seekp(offset * BLOCK_SIZE);
+        auto data = Blocks[dataIndex];
+        for (auto key)
     }
 };
 
