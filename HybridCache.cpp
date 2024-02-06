@@ -1,85 +1,12 @@
 #include <iostream>
 #include <unordered_map>
-#include <list>
 #include <fstream>
 #include <string>
 #include <sstream>
 
-const int MEMORY_CACHE_SIZE = 4 * 1024 * 1024;  // 10 MB
-const int DISK_CACHE_SIZE = 10 * 1024 * 1024;   // 10 MB
-const int BLOCK_SIZE = 2 * 1024 * 1024;           // 2 MB
-
-template <typename KeyType>
-class LRUList {
-private:
-    int capacity;
-    std::list<KeyType> lruList; // record data index
-
-public:
-    LRUList(int capacity) : capacity(capacity) {}
-
-    void visit(const KeyType key) {
-        auto pos = std::find(lruList.begin(), lruList.end(), key);
-        if (pos != lruList.end()) {
-            lruList.erase(pos);
-        }
-        lruList.push_front(key);
-        if (lruList.size() > capacity) {
-            lruList.pop_back();
-        }
-    }
-
-    int getCapacity() const {
-        return capacity;
-    }
-
-    bool full() const {
-        return lruList.size() == capacity;
-    }
-
-    KeyType evict() {
-        if (!lruList.empty()) {
-            auto key = lruList.back();
-            lruList.pop_back();
-            return key;
-        }
-    }
-};
-
-template <typename KeyType, typename ValueType>
-class Block {
-private:
-    int id;
-    int current_size;
-    std::unordered_map<KeyType, ValueType> data;
-
-public:
-    Block(int id) : id(id), current_size(0){}
-
-    bool get(const KeyType key, ValueType& value) {
-        auto pos = data.find(key);
-        if (pos != data.end()) {
-            value = pos->second;
-            return true;
-        }
-        return false;
-    }
-
-    bool put(const KeyType key, const ValueType& value) {
-        if (current_size < BLOCK_SIZE) {
-            data[key] = value;
-            current_size += sizeof(key) + sizeof(value);
-            return true;
-        }
-        return false;
-    }
-
-    int getCapacity() const {
-        return current_size;
-    }
-
-};
-
+#include "BloomFilter.h"
+#include "LRUList.h"
+#include "Block.h"
 
 
 template <typename KeyType, typename ValueType>
@@ -93,6 +20,7 @@ private:
     // data index on disk mapping
     std::unordered_map<int, int> dataIndexMap;
     // block floom filter
+    std::unordered_map<int, std::string> blockBloomFilterMap;
     // overall big hash table
     // key can be selective to different blocks
     // from disk, block compaction
@@ -106,8 +34,8 @@ public:
             diskFile.seekp(DISK_CACHE_SIZE - 1);
             diskFile.write("", 1);
             diskFile.close();
-            diskFile.open("hybrid_cache.dat", std::ios::in | std::ios::out | std::ios::binary);
         }
+        diskFile.open("hybrid_cache.dat", std::ios::in | std::ios::out | std::ios::binary);
         for (int i = 0; i < DISK_CACHE_SIZE / BLOCK_SIZE; ++i) {
             dataIndexMap[i] = -1;
         }
