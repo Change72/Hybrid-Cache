@@ -7,18 +7,18 @@
 
 #include <iostream>
 #include <list>
-
+#include <algorithm>
 // LRUList is a list of blocks. KeyType is the blockid
-template <typename KeyType>
+
 class LRUList {
 private:
     int capacity;
-    std::list<KeyType> lruList; // record data index
+    std::list<int> lruList; // record data index
 
 public:
-    LRUList(int capacity) : capacity(capacity) {}
+    LRUList(int capacity) : capacity(capacity), lruList() {}
 
-    void visit(const KeyType key) {
+    void visit(int key) {
         auto pos = std::find(lruList.begin(), lruList.end(), key);
         if (pos != lruList.end()) {
             lruList.erase(pos);
@@ -37,7 +37,7 @@ public:
         return lruList.size() == capacity;
     }
 
-    KeyType evict() {
+    int evict() {
         if (!lruList.empty()) {
             auto key = lruList.back();
             lruList.pop_back();
