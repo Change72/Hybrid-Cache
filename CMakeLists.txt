@@ -4,11 +4,11 @@ project(HybridCacheExample)
 
 set(CMAKE_CXX_STANDARD 11)
 
-add_executable(HybridCacheExample HybridCache.cpp)
-
-# You may need to adjust the paths if your system has a different location for libraries.
-target_include_directories(HybridCacheExample PRIVATE /usr/local/include)
-#target_link_libraries(HybridCacheExample PRIVATE /usr/local/lib/libfmt.a)
+include_directories(include)
+file(GLOB APP_SOURCES src/*.cpp)
 
 add_executable(testFileReadAndWrite tests/testFileReadAndWrite.cpp)
 add_executable(testTypeSize tests/testTypeSize.cpp)
+
+
+add_executable(HybridCacheExample main.cpp ${APP_SOURCES})
