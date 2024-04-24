@@ -1,6 +1,8 @@
+#ifndef HYBRIDCACHEEXAMPLE_HYBRIDCACHE_H
+#define HYBRIDCACHEEXAMPLE_HYBRIDCACHE_H
+
 #include <iostream>
 #include <unordered_map>
-#include <fstream>
 #include <string>
 
 #include "BloomFilter.h"
@@ -30,11 +32,37 @@ public:
                     dataFileName("hybrid.cache"),
                     metadataFileName("hybrid.meta"),
                     loadPreviousResult(false),
-                    blockBloomFilter(BLOOM_FILTER_BITS_PER_KEY, MAX_BF_SIZE)
-                    {
+                    blockBloomFilter(BLOOM_FILTER_BITS_PER_KEY, MAX_BF_SIZE) {
         if (loadPreviousResult) {
             BlockMetaInfo::loadBlockMetaData(metadataFileName, blocks_metadata);
-            for (auto &metadata : blocks_metadata) {
+            for (auto &metadata: blocks_metadata) {
+                diskOffsetToBlockId[metadata.second.getDiskOffset()] = metadata.first;
+            }
+        }
+
+        if (!fileIsExist(dataFileName)) {
+            initializeDiskFile(dataFileName);
+        }
+    }
+
+    // New constructor with parameters
+    HybridCache(
+            size_t memoryCacheSize,
+            size_t diskCacheSize,
+            const std::string& dataFile,
+            const std::string& metadataFile,
+            bool loadPrevResult,
+            int bloomFilterBitsPerKey,
+            int maxBloomFilterSize
+    ) : lruMemoryList(memoryCacheSize),
+        lruDiskList(diskCacheSize),
+        dataFileName(dataFile),
+        metadataFileName(metadataFile),
+        loadPreviousResult(loadPrevResult),
+        blockBloomFilter(bloomFilterBitsPerKey, maxBloomFilterSize) {
+        if (loadPreviousResult) {
+            BlockMetaInfo::loadBlockMetaData(metadataFileName, blocks_metadata);
+            for (auto &metadata: blocks_metadata) {
                 diskOffsetToBlockId[metadata.second.getDiskOffset()] = metadata.first;
             }
         }
@@ -56,7 +84,7 @@ public:
 
     bool insertEntryAvailable(const int block_id, const KeyType& key, const ValueType& value) {
         if (blocks_metadata[block_id].getCurrentSize() + Block<KeyType, ValueType>::getKeyTypeSize(key) +
-                        Block<KeyType, ValueType>::getValueTypeSize(value) > BLOCK_SIZE) {
+            Block<KeyType, ValueType>::getValueTypeSize(value) > BLOCK_SIZE) {
             return false;
         }
         return true;
@@ -106,15 +134,23 @@ public:
         // check if the key is in the memory, if yes, update the value
         for (auto &metadata : blocks_metadata) {
             if (blockBloomFilter.KeyMayMatch(std::to_string(key), metadata.second.getBlockBloomFilter())) {
-                // if the key is in the block, update the value
                 auto &block = blocks_inmemory[metadata.second.getId()];
+                // if the block is in the disk, read it to memory
+                if (metadata.second.getBlockIsInDisk()) {
+                    if (lruMemoryList.full()) {
+                        evictBlockFromMemory();
+                    }
+                    // todo some bug here
+                    block.readBlockFromDisk(dataFileName, metadata.second.getDiskOffset(), metadata.second.getKeyNum());
+                    metadata.second.setBlockIsInDisk(false);
+                }
+                // if the key is in the block, update the value
                 ValueType originalValue;
                 block.get(key, originalValue);
                 if (originalValue != value) {
                     block.update(key, value);
                     metadata.second.setBlockIsUpdated(true);
                 }
-
                 lruMemoryList.visit(metadata.second.getId());
                 return;
             }
@@ -128,7 +164,7 @@ public:
                 break;
             }
         }
-        if (availBlockId != -1) {
+        if (availBlockId == -1) {
             availBlockId = insertNewBlock();
         }
 
@@ -136,7 +172,7 @@ public:
         auto &block = blocks_inmemory[availBlockId];
         block.put(key, value);
         blocks_metadata[availBlockId].increaseCurrentSize(Block<KeyType, ValueType>::getKeyTypeSize(key) +
-                                                         Block<KeyType, ValueType>::getValueTypeSize(value));
+                                                          Block<KeyType, ValueType>::getValueTypeSize(value));
         std::string bf_dst = blocks_metadata[availBlockId].getBlockBloomFilter();
         blockBloomFilter.insertKey(std::to_string(key), &bf_dst);
         blocks_metadata[availBlockId].setBlockBloomFilter(bf_dst);
@@ -160,4 +196,8 @@ public:
         }
         return ValueType();
     }
+
+
 };
+
+#endif //HYBRIDCACHEEXAMPLE_HYBRIDCACHE_H

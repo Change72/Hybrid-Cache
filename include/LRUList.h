@@ -43,6 +43,7 @@ public:
             lruList.pop_back();
             return key;
         }
+        return -1;
     }
 };
 

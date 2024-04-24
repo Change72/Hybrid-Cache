@@ -227,7 +227,13 @@ public:
                 // read block bloom filter length and block bloom filter
                 size_t bf_length;
                 metadataFile.read(reinterpret_cast<char*>(&bf_length), sizeof(size_t));
-                metadataFile.read(reinterpret_cast<char*>(&bf_src), bf_length);
+
+                // Read block bloom filter
+                std::vector<char> bf_buffer(bf_length + 1); // Allocate buffer (+1 for null terminator)
+                metadataFile.read(bf_buffer.data(), bf_length);
+                bf_buffer[bf_length] = '\0'; // Null terminate the buffer
+                bf_src = bf_buffer.data();
+
                 blocks_metadata[block_id] = BlockMetaInfo(block_id, current_size_in_bytes, current_key_num, disk_offset, bf_src);
             }
             metadataFile.close();
@@ -238,14 +244,15 @@ public:
         std::fstream metadataFile;
         metadataFile.open(metadataFileName, std::ios::out | std::ios::binary);
         for (auto& metadata : blocks_metadata) {
-            metadataFile.write(reinterpret_cast<char*>(metadata.second.getId()), sizeof(int));
-            metadataFile.write(reinterpret_cast<char*>(metadata.second.getCurrentSize()), sizeof(size_t));
-            metadataFile.write(reinterpret_cast<char*>(metadata.second.getKeyNum()), sizeof(int));
-            metadataFile.write(reinterpret_cast<char*>(metadata.second.getDiskOffset()), sizeof(int));
+            metadataFile.write(std::to_string(metadata.second.getId()).c_str(), sizeof(int));
+            metadataFile.write(std::to_string(metadata.second.getCurrentSize()).c_str(), sizeof(size_t));
+            metadataFile.write(std::to_string(metadata.second.getKeyNum()).c_str(), sizeof(int));
+            metadataFile.write(std::to_string(metadata.second.getDiskOffset()).c_str(), sizeof(int));
+
             // write block bloom filter length and block bloom filter
             size_t bf_length = metadata.second.getBlockBloomFilter().size();
             metadataFile.write(reinterpret_cast<char*>(&bf_length), sizeof(size_t));
-            metadataFile.write(reinterpret_cast<const char*>(metadata.second.getBlockBloomFilter().c_str()), bf_length);
+            metadataFile.write(metadata.second.getBlockBloomFilter().c_str(), bf_length);
         }
         metadataFile.close();
     }
