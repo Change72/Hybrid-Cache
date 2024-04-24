@@ -55,6 +55,22 @@ void test_eviction() {
     std::cout << "Eviction test passed!" << std::endl;
 }
 
+void test_load_previous_cache() {
+    // Create a new cache
+    HybridCache<int, std::string> cache (
+            MEMORY_CACHE_SIZE,
+            DISK_CACHE_SIZE,
+            BLOCK_SIZE,
+            "hybrid.cache",
+            "hybrid.meta",
+            true,
+            MAX_BF_SIZE,
+            BLOOM_FILTER_BITS_PER_KEY
+    );
+
+    std::cout << "Load previous cache test passed!" << std::endl;
+}
+
 // Add more test cases as needed
 
 int main() {
@@ -62,6 +78,7 @@ int main() {
     test_insert_and_retrieve();
     test_multi_block();
     test_eviction();
+    test_load_previous_cache();
 
     // Add more test cases here
 

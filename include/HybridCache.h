@@ -49,13 +49,14 @@ public:
     HybridCache(
             size_t memoryCacheSize,
             size_t diskCacheSize,
+            size_t blockSize,
             const std::string& dataFile,
             const std::string& metadataFile,
             bool loadPrevResult,
             int bloomFilterBitsPerKey,
             int maxBloomFilterSize
-    ) : lruMemoryList(memoryCacheSize),
-        lruDiskList(diskCacheSize),
+    ) : lruMemoryList(memoryCacheSize / blockSize),
+        lruDiskList(diskCacheSize / blockSize),
         dataFileName(dataFile),
         metadataFileName(metadataFile),
         loadPreviousResult(loadPrevResult),
@@ -187,6 +188,7 @@ public:
         for (auto &metadata : blocks_metadata) {
             if (blockBloomFilter.KeyMayMatch(std::to_string(key), metadata.second.getBlockBloomFilter())) {
                 auto &block = blocks_inmemory[metadata.second.getId()];
+                // todo if the block is in the disk, read it to memory
                 ValueType value;
                 if (block.get(key, value)) {
                     lruMemoryList.visit(metadata.second.getId());

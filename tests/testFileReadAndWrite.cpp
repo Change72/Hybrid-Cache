@@ -8,6 +8,62 @@
 
 using namespace std;
 
+void test_write_and_read_int() {
+    const char* dataFileName = "example.txt";
+
+    // write an int to the file
+    int data = 123;
+    ofstream outfile(dataFileName, ios::binary);
+    if (!outfile.good()) {
+        cerr << "Failed to open the file." << endl;
+        return;
+    }
+    outfile.write(reinterpret_cast<const char*>(&data), sizeof(data));
+    outfile.close();
+
+    cout << "Data written successfully." << endl;
+
+    // read the int from the file
+    int readData;
+    ifstream infile_int(dataFileName, ios::binary);
+    if (!infile_int.good()) {
+        cerr << "The file does not exist." << endl;
+        return;
+    }
+    infile_int.read(reinterpret_cast<char*>(&readData), sizeof(readData));
+    infile_int.close();
+
+    cout << "Data read successfully: " << readData << endl;
+}
+
+void test_write_and_read_size_t() {
+    const char* dataFileName = "example.txt";
+
+    // write a size_t to the file
+    size_t data = 1234567890;
+    ofstream outfile(dataFileName, ios::binary);
+    if (!outfile.good()) {
+        cerr << "Failed to open the file." << endl;
+        return;
+    }
+    outfile.write(reinterpret_cast<const char*>(&data), sizeof(data));
+    outfile.close();
+
+    cout << "Data written successfully." << endl;
+
+    // read the size_t from the file
+    size_t readData;
+    ifstream infile_size_t(dataFileName, ios::binary);
+    if (!infile_size_t.good()) {
+        cerr << "The file does not exist." << endl;
+        return;
+    }
+    infile_size_t.read(reinterpret_cast<char*>(&readData), sizeof(readData));
+    infile_size_t.close();
+
+    cout << "Data read successfully: " << readData << endl;
+}
+
 int main() {
     char cwd[1024];
     if (getcwd(cwd, sizeof(cwd)) != nullptr) {
@@ -18,6 +74,8 @@ int main() {
     }
 
     const char* dataFileName = "example.txt";
+
+    test_write_and_read_size_t();
 
     // if the file content length is less than offset (10), the file will be extended with null bytes
     const int offset = 10; // Example offset

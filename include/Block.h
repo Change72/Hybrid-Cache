@@ -221,18 +221,15 @@ public:
             int disk_offset;
             std::string bf_src;
             while (metadataFile.read(reinterpret_cast<char*>(&block_id), sizeof(int))) {
-                metadataFile.read(reinterpret_cast<char*>(&current_size_in_bytes), sizeof(size_t));
+                metadataFile.read(reinterpret_cast<char*>(&current_size_in_bytes), sizeof(current_size_in_bytes));
                 metadataFile.read(reinterpret_cast<char*>(&current_key_num), sizeof(int));
                 metadataFile.read(reinterpret_cast<char*>(&disk_offset), sizeof(int));
+
                 // read block bloom filter length and block bloom filter
                 size_t bf_length;
-                metadataFile.read(reinterpret_cast<char*>(&bf_length), sizeof(size_t));
-
-                // Read block bloom filter
-                std::vector<char> bf_buffer(bf_length + 1); // Allocate buffer (+1 for null terminator)
-                metadataFile.read(bf_buffer.data(), bf_length);
-                bf_buffer[bf_length] = '\0'; // Null terminate the buffer
-                bf_src = bf_buffer.data();
+                metadataFile.read(reinterpret_cast<char*>(&bf_length), sizeof(bf_length));
+                bf_src.resize(bf_length);
+                metadataFile.read(&bf_src[0], bf_length);
 
                 blocks_metadata[block_id] = BlockMetaInfo(block_id, current_size_in_bytes, current_key_num, disk_offset, bf_src);
             }
@@ -244,15 +241,24 @@ public:
         std::fstream metadataFile;
         metadataFile.open(metadataFileName, std::ios::out | std::ios::binary);
         for (auto& metadata : blocks_metadata) {
-            metadataFile.write(std::to_string(metadata.second.getId()).c_str(), sizeof(int));
-            metadataFile.write(std::to_string(metadata.second.getCurrentSize()).c_str(), sizeof(size_t));
-            metadataFile.write(std::to_string(metadata.second.getKeyNum()).c_str(), sizeof(int));
-            metadataFile.write(std::to_string(metadata.second.getDiskOffset()).c_str(), sizeof(int));
+            int block_id = metadata.second.getId();
+            metadataFile.write(reinterpret_cast<char*>(&block_id), sizeof(int));
+
+            size_t current_size_in_bytes = metadata.second.getCurrentSize();
+            metadataFile.write(reinterpret_cast<char*>(&current_size_in_bytes), sizeof(current_size_in_bytes));
+
+            int current_key_num = metadata.second.getKeyNum();
+            metadataFile.write(reinterpret_cast<char*>(&current_key_num), sizeof(int));
+
+            int disk_offset = metadata.second.getDiskOffset();
+            metadataFile.write(reinterpret_cast<char*>(&disk_offset), sizeof(int));
 
             // write block bloom filter length and block bloom filter
             size_t bf_length = metadata.second.getBlockBloomFilter().size();
-            metadataFile.write(reinterpret_cast<char*>(&bf_length), sizeof(size_t));
-            metadataFile.write(metadata.second.getBlockBloomFilter().c_str(), bf_length);
+            metadataFile.write(reinterpret_cast<char*>(&bf_length), sizeof(bf_length));
+
+            std::string bf_src = metadata.second.getBlockBloomFilter();
+            metadataFile.write(bf_src.c_str(), bf_length);
         }
         metadataFile.close();
     }

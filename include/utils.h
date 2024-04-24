@@ -57,6 +57,8 @@ int findAvailableSlotInDisk(const std::string& dataFileName) {
         }
         offset += BLOCK_SIZE;
     }
+    // todo if the disk is full, we need to evict some blocks
+    // in disk lru list
     return -1;
 }
 
