@@ -49,8 +49,8 @@ void test_eviction() {
 
     cache.insert(100, longString);
 
-    // Ensure that the evicted block is no longer in memory
-    assert(cache.get(0) == ""); // Assuming default-constructed ValueType represents absence
+    // Ensure that the evicted block is no longer in memory, but promote from disk
+    assert(cache.get(0) == longString); // Assuming default-constructed ValueType represents absence
 
     std::cout << "Eviction test passed!" << std::endl;
 }

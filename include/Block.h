@@ -28,13 +28,52 @@ private:
 
     // Overloaded function for std::string
     static size_t getSize(const std::string& t, std::true_type) {
-        return t.size();
+        return t.size() + sizeof(size_t);
     }
 
     // Dispatcher function to select appropriate overload
     template<typename T>
     static size_t getSize(const T& t) {
         return getSize(t, std::is_same<T, std::string>());
+    }
+
+    // Dispatcher function to select appropriate overload
+    template<typename T>
+    static void writeToFile(std::fstream& diskFile, const T& t) {
+        writeToFile(diskFile, t, std::is_same<T, std::string>());
+    }
+
+    // Overloaded function for types other than std::string
+    template<typename T>
+    static void writeToFile(std::fstream& diskFile, const T& t, std::false_type) {
+        diskFile.write(reinterpret_cast<const char*>(&t), sizeof(T));
+    }
+
+    // Overloaded function for std::string
+    static void writeToFile(std::fstream& diskFile, const std::string& t, std::true_type) {
+        size_t size = t.size();
+        diskFile.write(reinterpret_cast<const char*>(&size), sizeof(size_t));
+        diskFile.write(t.c_str(), t.size());
+    }
+
+    // read key and value from the disk
+    template<typename T>
+    static void readFromFile(std::fstream& diskFile, T& t) {
+        readFromFile(diskFile, t, std::is_same<T, std::string>());
+    }
+
+    // Overloaded function for types other than std::string
+    template<typename T>
+    static void readFromFile(std::fstream& diskFile, T& t, std::false_type) {
+        diskFile.read(reinterpret_cast<char*>(&t), sizeof(T));
+    }
+
+    // Overloaded function for std::string
+    static void readFromFile(std::fstream& diskFile, std::string& t, std::true_type) {
+        size_t size;
+        diskFile.read(reinterpret_cast<char*>(&size), sizeof(size_t));
+        t.resize(size);
+        diskFile.read(&t[0], size);
     }
 
 public:
@@ -77,6 +116,7 @@ public:
     size_t getBlockSize() const {
         size_t size = 0;
         for (const auto& pair : data) {
+            // if string, need to add the size of size_t
             size += getKeyTypeSize(pair.first) + getValueTypeSize(pair.second);
         }
         return size;
@@ -89,10 +129,13 @@ public:
 
         diskFile.seekg(diskOffset);
         for (int i = 0; i < keyNum; ++i) {
+            // read key and value from the disk
             KeyType key;
             ValueType value;
-            diskFile.read(reinterpret_cast<char*>(&key), sizeof(KeyType));
-            diskFile.read(reinterpret_cast<char*>(&value), sizeof(ValueType));
+
+            this->readFromFile(diskFile, key);
+            this->readFromFile(diskFile, value);
+
             this->put(key, value);
         }
 
@@ -106,8 +149,8 @@ public:
 
         diskFile.seekp(diskOffset);
         for (auto& entry : this->data) {
-            diskFile.write(reinterpret_cast<const char*>(&entry.first), sizeof(KeyType));
-            diskFile.write(reinterpret_cast<const char*>(&entry.second), sizeof(ValueType));
+            this->writeToFile(diskFile, entry.first);
+            this->writeToFile(diskFile, entry.second);
         }
 
         diskFile.close();
@@ -221,13 +264,13 @@ public:
             int disk_offset;
             std::string bf_src;
             while (metadataFile.read(reinterpret_cast<char*>(&block_id), sizeof(int))) {
-                metadataFile.read(reinterpret_cast<char*>(&current_size_in_bytes), sizeof(current_size_in_bytes));
+                metadataFile.read(reinterpret_cast<char*>(&current_size_in_bytes), sizeof(size_t));
                 metadataFile.read(reinterpret_cast<char*>(&current_key_num), sizeof(int));
                 metadataFile.read(reinterpret_cast<char*>(&disk_offset), sizeof(int));
 
                 // read block bloom filter length and block bloom filter
                 size_t bf_length;
-                metadataFile.read(reinterpret_cast<char*>(&bf_length), sizeof(bf_length));
+                metadataFile.read(reinterpret_cast<char*>(&bf_length), sizeof(size_t));
                 bf_src.resize(bf_length);
                 metadataFile.read(&bf_src[0], bf_length);
 
@@ -245,7 +288,7 @@ public:
             metadataFile.write(reinterpret_cast<char*>(&block_id), sizeof(int));
 
             size_t current_size_in_bytes = metadata.second.getCurrentSize();
-            metadataFile.write(reinterpret_cast<char*>(&current_size_in_bytes), sizeof(current_size_in_bytes));
+            metadataFile.write(reinterpret_cast<char*>(&current_size_in_bytes), sizeof(size_t));
 
             int current_key_num = metadata.second.getKeyNum();
             metadataFile.write(reinterpret_cast<char*>(&current_key_num), sizeof(int));
@@ -255,7 +298,7 @@ public:
 
             // write block bloom filter length and block bloom filter
             size_t bf_length = metadata.second.getBlockBloomFilter().size();
-            metadataFile.write(reinterpret_cast<char*>(&bf_length), sizeof(bf_length));
+            metadataFile.write(reinterpret_cast<char*>(&bf_length), sizeof(size_t));
 
             std::string bf_src = metadata.second.getBlockBloomFilter();
             metadataFile.write(bf_src.c_str(), bf_length);

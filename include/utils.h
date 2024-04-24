@@ -57,7 +57,7 @@ int findAvailableSlotInDisk(const std::string& dataFileName) {
         }
         offset += BLOCK_SIZE;
     }
-    // todo if the disk is full, we need to evict some blocks
+    // todo if the disk is full, we need to evict some blocks. Now we need to manually 'rm hybrid.*' if full
     // in disk lru list
     return -1;
 }

@@ -141,7 +141,6 @@ public:
                     if (lruMemoryList.full()) {
                         evictBlockFromMemory();
                     }
-                    // todo some bug here
                     block.readBlockFromDisk(dataFileName, metadata.second.getDiskOffset(), metadata.second.getKeyNum());
                     metadata.second.setBlockIsInDisk(false);
                 }
@@ -188,7 +187,15 @@ public:
         for (auto &metadata : blocks_metadata) {
             if (blockBloomFilter.KeyMayMatch(std::to_string(key), metadata.second.getBlockBloomFilter())) {
                 auto &block = blocks_inmemory[metadata.second.getId()];
-                // todo if the block is in the disk, read it to memory
+
+                if (metadata.second.getBlockIsInDisk()) {
+                    if (lruMemoryList.full()) {
+                        evictBlockFromMemory();
+                    }
+                    block.readBlockFromDisk(dataFileName, metadata.second.getDiskOffset(), metadata.second.getKeyNum());
+                    metadata.second.setBlockIsInDisk(false);
+                }
+
                 ValueType value;
                 if (block.get(key, value)) {
                     lruMemoryList.visit(metadata.second.getId());

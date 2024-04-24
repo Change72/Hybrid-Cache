@@ -48,5 +48,12 @@ int main() {
     std::cout << "Key size: " << pair2.getKeySize() << std::endl; // Output: Size of string content
     std::cout << "Value size: " << pair2.getValueSize() << std::endl; // Output: Size of double
 
+    // Example usage with size_t key and char value
+    size_t key = 100;
+    std::cout << "Size of size_t: " << sizeof(key) << std::endl; // Output: Size of size_t
+    KeyValuePair<size_t, char> pair3(100, 'A');
+    std::cout << "Key size: " << pair3.getKeySize() << std::endl; // Output: Size of size_t
+    std::cout << "Value size: " << pair3.getValueSize() << std::endl; // Output: Size of char
+
     return 0;
 }
