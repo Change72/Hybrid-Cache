@@ -182,6 +182,18 @@ public:
         lruMemoryList.visit(availBlockId);
     }
 
+    int keyExist(KeyType key) {
+        for (auto &metadata : blocks_metadata) {
+            if (blockBloomFilter.KeyMayMatch(std::to_string(key), metadata.second.getBlockBloomFilter())) {
+                if (metadata.second.getBlockIsInDisk())
+                    return 1; // the key is in the disk
+                else
+                    return 0; // the key is in the memory
+            }
+        }
+        return -1;
+    }
+
     // get
     ValueType get(KeyType key) {
         for (auto &metadata : blocks_metadata) {
